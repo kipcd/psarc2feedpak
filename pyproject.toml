@@ -17,6 +17,9 @@ dependencies = [
 [project.scripts]
 psarc2feedpak = "psarc2feedpak.__main__:main"
 
+[project.gui-scripts]
+psarc2feedpak-gui = "psarc2feedpak.gui:main"
+
 [project.urls]
 Homepage = "https://github.com/carelesshangman/psarc2feedpak"
 

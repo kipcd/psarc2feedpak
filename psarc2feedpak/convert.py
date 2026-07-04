@@ -18,6 +18,10 @@ from .psarc import read as read_psarc
 
 FEEDPAK_VERSION = "1.14.0"
 
+
+class ConversionError(Exception):
+    """Raised for problems the user can act on (bad input, missing tools)."""
+
 # Rocksmith left-hand finger ids already line up with feedpak's (0=thumb..4=pinky).
 _ARR_SORT = {"lead": 0, "combo": 1, "rhythm": 2, "bass": 3}
 
@@ -245,9 +249,9 @@ def _identify(files):
     return songs, attrs, wems, dds
 
 
-def convert(psarc_path, out_path=None, *, keep_dir=False):
+def convert(psarc_path, out_path=None, *, keep_dir=False, log=print):
     psarc_path = Path(psarc_path)
-    print(f"Reading {psarc_path.name}")
+    log(f"Reading {psarc_path.name}")
     songs, attrs, wems, dds = _identify(read_psarc(psarc_path))
 
     playable, vocals, meta_attrs = [], None, None
@@ -261,7 +265,7 @@ def convert(psarc_path, out_path=None, *, keep_dir=False):
         if meta_attrs is None or name.lower() == "lead":
             meta_attrs = a
     if not playable:
-        raise SystemExit("no playable arrangements in this psarc")
+        raise ConversionError("no playable arrangements in this psarc")
     playable.sort(key=lambda p: _ARR_SORT.get(p[3].lower(), 9))
     meta_attrs = meta_attrs or {}
 
@@ -314,7 +318,7 @@ def convert(psarc_path, out_path=None, *, keep_dir=False):
         manifest_arrs.append(entry)
         if timeline is None:
             timeline = _timeline(song)
-        print(f"  {arr_id}: {len(arr['notes']) + len(arr['chords'])} notes/chords")
+        log(f"  {arr_id}: {len(arr['notes']) + len(arr['chords'])} notes/chords")
 
     dump(timeline, "song_timeline.json")
     extras["song_timeline"] = "song_timeline.json"
@@ -326,29 +330,29 @@ def convert(psarc_path, out_path=None, *, keep_dir=False):
         if pitch:
             dump(pitch, "vocal_pitch.json")
             extras["vocal_pitch"] = "vocal_pitch.json"
-        print(f"  lyrics: {len(vocals.vocals)} syllables")
+        log(f"  lyrics: {len(vocals.vocals)} syllables")
 
     tools = Tools()
     stems = []
     if wems:
         if not tools.can_audio:
-            raise SystemExit("need " + " and ".join(tools.missing())
-                             + " for audio (put vgmstream-cli in tools/vgmstream/)")
-        print("  audio: wem -> ogg")
+            raise ConversionError("need " + " and ".join(tools.missing())
+                                  + " for audio (put vgmstream-cli in tools/vgmstream/)")
+        log("  audio: wem -> ogg")
         tools.wem_to_ogg(wems[0], build / "stems" / "full.ogg", scratch)
         stems.append({"id": "full", "file": "stems/full.ogg", "default": True})
         if len(wems) > 1:
             tools.wem_to_ogg(wems[1], build / "preview.ogg", scratch)
             extras["preview"] = "preview.ogg"
     else:
-        print("  warning: no .wem audio found")
+        log("  warning: no .wem audio found")
 
     if dds and tools.ffmpeg:
         try:
             tools.dds_to_png(dds[0], build / "cover.png", scratch)
             extras["cover"] = "cover.png"
         except RuntimeError as e:
-            print(f"  warning: cover failed ({e})")
+            log(f"  warning: cover failed ({e})")
 
     extras["x_converted_from"] = "rocksmith2014-psarc"
     (build / "manifest.yaml").write_text(
@@ -370,5 +374,5 @@ def convert(psarc_path, out_path=None, *, keep_dir=False):
     else:
         shutil.rmtree(build)
 
-    print(f"Wrote {out_path}")
+    log(f"Wrote {out_path}")
     return out_path

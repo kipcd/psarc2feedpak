@@ -22,6 +22,8 @@ Audio conversion needs two external tools on your `PATH` (or drop
 
 ## Usage
 
+Command line:
+
 ```
 python -m psarc2feedpak song_p.psarc
 python -m psarc2feedpak song_p.psarc -o out.feedpak
@@ -29,6 +31,16 @@ python -m psarc2feedpak song_p.psarc --keep-dir   # also leave the unzipped fold
 ```
 
 Output defaults to `<artist> - <title>.feedpak` next to the input.
+
+GUI:
+
+```
+python -m psarc2feedpak.gui
+```
+
+Pick one or more `.psarc` files, choose an output folder, and convert. Prebuilt
+Windows builds (with ffmpeg and vgmstream bundled, no Python needed) are on the
+[Releases](https://github.com/carelesshangman/psarc2feedpak/releases) page.
 
 ## Notes
 
@@ -40,8 +52,13 @@ Output defaults to `<artist> - <title>.feedpak` next to the input.
 
 The AES keys required to read a `.psarc` are the fixed keys Rocksmith 2014 ships
 with, the same ones every open-source RS tool has used for a decade. This is a
-tool for converting songs you already own for personal use. It is not affiliated
-with or endorsed by Ubisoft.
+tool for converting songs you already own for personal use.
+
+This project is independent and is **not affiliated with, endorsed by, or
+associated with any of the businesses, products, or projects it interoperates
+with** — including Ubisoft / Rocksmith, got-feedBack, ffmpeg, or vgmstream. All
+trademarks belong to their respective owners. The prebuilt releases bundle
+ffmpeg (GPL) and vgmstream (see their licenses in the download).
 
 ## Credits
 

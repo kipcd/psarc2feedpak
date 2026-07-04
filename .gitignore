@@ -21,5 +21,9 @@ tools/
 diagnostics-builtin/
 tutorials-builtin/
 
+# Editors
+.idea/
+.vscode/
+
 # Claude Code workspace
 .claude/

@@ -2,22 +2,41 @@
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
-_HERE = Path(__file__).resolve().parent
-_VENDORED = [_HERE.parent / "tools" / "vgmstream", _HERE.parent / "tools"]
+
+def _search_dirs():
+    """Where to look for bundled tools, most-specific first.
+
+    Covers running from source and running as a PyInstaller build, where the
+    binaries sit next to the .exe (or in its _MEIPASS temp dir) under tools/.
+    """
+    roots = []
+    if getattr(sys, "frozen", False):
+        roots += [Path(sys.executable).resolve().parent,
+                  Path(getattr(sys, "_MEIPASS", "."))]
+    roots.append(Path(__file__).resolve().parent.parent)  # repo root from source
+    dirs = []
+    for r in roots:
+        dirs += [r / "tools" / "vgmstream", r / "tools", r]
+    return dirs
 
 
 def find(name, extra_dirs=()):
-    for d in list(extra_dirs) + _VENDORED:
+    for d in list(extra_dirs) + _search_dirs():
         exe = Path(d) / f"{name}.exe"
         if exe.exists():
             return str(exe)
     return shutil.which(name)
 
 
+# Keep the child tools from flashing a console window under a windowed GUI build.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+
+
 def _run(cmd):
-    p = subprocess.run(cmd, capture_output=True, text=True)
+    p = subprocess.run(cmd, capture_output=True, text=True, creationflags=_NO_WINDOW)
     if p.returncode != 0:
         raise RuntimeError(f"{Path(cmd[0]).name} failed:\n{p.stderr[-800:]}")
 

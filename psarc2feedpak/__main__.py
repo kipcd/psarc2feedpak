@@ -1,6 +1,7 @@
 import argparse
+import sys
 
-from .convert import convert
+from .convert import convert, ConversionError
 
 
 def main():
@@ -12,7 +13,10 @@ def main():
     ap.add_argument("--keep-dir", action="store_true",
                     help="also leave the unzipped package as <name>.feedpak.dir")
     args = ap.parse_args()
-    convert(args.psarc, args.output, keep_dir=args.keep_dir)
+    try:
+        convert(args.psarc, args.output, keep_dir=args.keep_dir)
+    except ConversionError as e:
+        sys.exit(f"error: {e}")
 
 
 if __name__ == "__main__":
