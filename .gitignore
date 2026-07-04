@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Bundled binaries (users fetch their own)
+tools/
+
+# Source material and conversion output — don't commit copyrighted songs
+*.psarc
+*.feedpak
+*.feedpak.dir/
+*.feedpak.build/
+*.sloppak
+
+# Unrelated app content that happens to live in this folder
+diagnostics-builtin/
+tutorials-builtin/
+
+# Claude Code workspace
+.claude/
