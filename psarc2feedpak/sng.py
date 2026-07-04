@@ -44,7 +44,7 @@ ChordTemplate = Struct(
 
 ChordNote = Struct(
     "mask" / Int32ul[6],
-    "bends" / Struct("values" / Bend[32], "count" / Int32ul)[6],
+    "bends" / Struct("steps" / Bend[32], "count" / Int32ul)[6],
     "slideTo" / Int8sl[6],
     "slideUnpitchTo" / Int8sl[6],
     "vibrato" / Int16sl[6],

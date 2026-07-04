@@ -117,7 +117,7 @@ def _chord(n, song):
                 if cn.mask[s] & bit:
                     note[key] = True
             if cn.bends[s].count > 0:
-                vals = cn.bends[s].values[:cn.bends[s].count]
+                vals = cn.bends[s].steps[:cn.bends[s].count]
                 note["bn"] = _r(max(b.step for b in vals))
                 note["bnv"] = [{"t": _r(max(0.0, b.time - n.time)), "v": _r(b.step)}
                                for b in vals]
