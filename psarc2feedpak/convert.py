@@ -9,6 +9,7 @@ game plays on the hardest setting and matches metadata.maxNotes exactly.
 
 import json
 import shutil
+import time
 import zipfile
 from pathlib import Path
 
@@ -34,8 +35,35 @@ _FLAGS = [
 ]
 
 
+_TUNING_NAMES = {
+    (0, 0, 0, 0, 0, 0): "E Standard",
+    (-1, -1, -1, -1, -1, -1): "Eb Standard",
+    (-2, -2, -2, -2, -2, -2): "D Standard",
+    (-3, -3, -3, -3, -3, -3): "C# Standard",
+    (-4, -4, -4, -4, -4, -4): "C Standard",
+    (-2, 0, 0, 0, 0, 0): "Drop D",
+    (-3, -1, -1, -1, -1, -1): "Eb Drop Db",
+    (-4, -2, -2, -2, -2, -2): "D Drop C",
+    (-5, -3, -3, -3, -3, -3): "C# Drop B",
+}
+
+
 def _r(x):
     return round(float(x), 3)
+
+
+def _tuning_name(offsets):
+    t = tuple(int(x) for x in offsets)
+    return _TUNING_NAMES.get(t) or "custom " + "/".join(str(x) for x in t)
+
+
+def _size(n):
+    return f"{n / 1_048_576:.1f} MB" if n >= 1_048_576 else f"{max(n, 1024) // 1024} KB"
+
+
+def _mmss(seconds):
+    m, s = divmod(int(seconds), 60)
+    return f"{m}:{s:02d}"
 
 
 def _flatten(song):
@@ -252,7 +280,7 @@ def _identify(files):
 def convert_song(song_key, songs, attrs, wems, dds, out_path, out_dir, *,
                  keep_dir=False, log=print):
     """Convert a single song to feedpak format."""
-    log(f"Converting {song_key}...")
+    t0 = time.perf_counter()
 
     playable, vocals, meta_attrs = [], None, None
     for stem, song in songs.items():
@@ -277,6 +305,10 @@ def convert_song(song_key, songs, attrs, wems, dds, out_path, out_dir, *,
         "duration": float(meta_attrs.get("SongLength")
                           or playable[0][1].metadata.songLength),
     }
+    byline = f'"{meta["title"]}" by {meta["artist"]}'
+    if meta.get("album"):
+        byline += f" [{meta['album']}]"
+    log(f"Converting {byline} ({_mmss(meta['duration'])})")
 
     if out_path is None:
         safe = "".join(c if c.isalnum() or c in " -_'" else "_"
@@ -325,7 +357,13 @@ def convert_song(song_key, songs, attrs, wems, dds, out_path, out_dir, *,
         manifest_arrs.append(entry)
         if timeline is None:
             timeline = _timeline(song)
-        log(f"  {arr_id}: {len(arr['notes']) + len(arr['chords'])} notes/chords")
+        tune = _tuning_name(entry["tuning"])
+        if entry["capo"]:
+            tune += f", capo {entry['capo']}"
+        counts = f"{len(arr['notes'])} notes"
+        if arr["chords"]:
+            counts += f" + {len(arr['chords'])} chords"
+        log(f"  {arr_id:<9} {tune:<14} {counts}")
 
     dump(timeline, "song_timeline.json")
     extras["song_timeline"] = "song_timeline.json"
@@ -337,7 +375,10 @@ def convert_song(song_key, songs, attrs, wems, dds, out_path, out_dir, *,
         if pitch:
             dump(pitch, "vocal_pitch.json")
             extras["vocal_pitch"] = "vocal_pitch.json"
-        log(f"  lyrics: {len(vocals.vocals)} syllables")
+        log(f"  lyrics    {len(vocals.vocals)} syllables"
+            + (" with pitch" if pitch else ""))
+    else:
+        log("  lyrics    none in this chart")
 
     tools = Tools()
     stems = []
@@ -345,12 +386,16 @@ def convert_song(song_key, songs, attrs, wems, dds, out_path, out_dir, *,
         if not tools.can_audio:
             raise ConversionError("need " + " and ".join(tools.missing())
                                   + " for audio (put vgmstream-cli in tools/vgmstream/)")
-        log("  audio: wem -> ogg")
-        tools.wem_to_ogg(wems[0], build / "stems" / "full.ogg", scratch)
+        log(f"  audio     encoding {_size(len(wems[0]))} wem...")
+        ogg = build / "stems" / "full.ogg"
+        tools.wem_to_ogg(wems[0], ogg, scratch)
         stems.append({"id": "full", "file": "stems/full.ogg", "default": True})
+        audio_line = f"  audio     full.ogg ({_size(ogg.stat().st_size)})"
         if len(wems) > 1:
             tools.wem_to_ogg(wems[1], build / "preview.ogg", scratch)
             extras["preview"] = "preview.ogg"
+            audio_line += " + preview"
+        log(audio_line)
     else:
         log("  warning: no .wem audio found")
 
@@ -358,6 +403,7 @@ def convert_song(song_key, songs, attrs, wems, dds, out_path, out_dir, *,
         try:
             tools.dds_to_png(dds[0], build / "cover.png", scratch)
             extras["cover"] = "cover.png"
+            log(f"  cover     cover.png ({_size((build / 'cover.png').stat().st_size)})")
         except RuntimeError as e:
             log(f"  warning: cover failed ({e})")
 
@@ -381,7 +427,8 @@ def convert_song(song_key, songs, attrs, wems, dds, out_path, out_dir, *,
     else:
         shutil.rmtree(build)
 
-    log(f"Wrote {out_path}")
+    log(f"Wrote {out_path} ({_size(out_path.stat().st_size)}, "
+        f"{time.perf_counter() - t0:.1f}s)")
     return out_path
 
 
@@ -425,6 +472,8 @@ def convert(psarc_path, out_path=None, *, out_dir=None, keep_dir=False, log=prin
     groups = {}
     for stem, song in songs.items():
         groups.setdefault(stem.rsplit("_", 1)[0], {})[stem] = song
+    log(f"  found {len(groups)} song{'s' if len(groups) != 1 else ''}, "
+        f"{len(songs)} arrangement{'s' if len(songs) != 1 else ''}")
 
     if out_path is not None and len(groups) > 1:
         raise ConversionError("cannot write multiple songs to a single output path")
