@@ -161,13 +161,61 @@ def _chord(n, song):
     return out
 
 
+def _phrases(song):
+    """The per-phrase difficulty ladder (feedpak §6.7), or None if flat.
+
+    Same shapes as the top-level arrays; the top-level chart stays the
+    full-difficulty flatten so readers without a difficulty control are
+    unaffected.
+    """
+    maxdiff = max((p.maxDifficulty for p in song.phrases), default=0)
+    if len(song.levels) < 2 or maxdiff == 0:
+        return None
+
+    out = []
+    for i, it in enumerate(song.phraseIterations):
+        md = song.phrases[it.phraseId].maxDifficulty
+        levels = []
+        for level in song.levels:
+            if level.difficulty > md:
+                continue
+            raw = sorted((n for n in level.notes if n.iterId == i),
+                         key=lambda n: n.time)
+            anchors = [a for a in level.anchors if a.iterId == i]
+            shapes = []
+            for is_arp, prints in enumerate(level.fingerprints):
+                shapes += [(fp, bool(is_arp)) for fp in prints
+                           if it.time <= fp.startTime < it.endTime]
+            if not (raw or anchors or shapes):
+                continue
+            notes, chords = [], []
+            for n in raw:
+                (chords if n.mask & sng.CHORD else notes).append(
+                    _chord(n, song) if n.mask & sng.CHORD else _note(n))
+            levels.append({
+                "difficulty": int(level.difficulty),
+                "notes": notes,
+                "chords": chords,
+                "anchors": [{"time": _r(a.time), "fret": int(a.fret),
+                             "width": int(a.width)} for a in anchors],
+                "handshapes": [{"chord_id": int(fp.chordId),
+                                "start_time": _r(fp.startTime),
+                                "end_time": _r(fp.endTime), "arp": arp}
+                               for fp, arp in sorted(shapes,
+                                                     key=lambda s: s[0].startTime)],
+            })
+        out.append({"start_time": _r(it.time), "end_time": _r(it.endTime),
+                    "max_difficulty": int(md), "levels": levels})
+    return out if any(p["levels"] for p in out) else None
+
+
 def _arrangement(song, name):
     notes_raw, anchors_raw, shapes_raw = _flatten(song)
     notes, chords = [], []
     for n in notes_raw:
         (chords if n.mask & sng.CHORD else notes).append(
             _chord(n, song) if n.mask & sng.CHORD else _note(n))
-    return {
+    out = {
         "name": name,
         "tuning": [int(x) for x in song.metadata.tuning],
         "capo": max(0, int(song.metadata.capo)),
@@ -184,6 +232,10 @@ def _arrangement(song, name):
                        "arp": bool(t.mask & sng.TEMPLATE_ARPEGGIO)}
                       for t in song.chordTemplates],
     }
+    phrases = _phrases(song)
+    if phrases:
+        out["phrases"] = phrases
+    return out
 
 
 def _timeline(song):
@@ -363,6 +415,8 @@ def convert_song(song_key, songs, attrs, wems, dds, out_path, out_dir, *,
         counts = f"{len(arr['notes'])} notes"
         if arr["chords"]:
             counts += f" + {len(arr['chords'])} chords"
+        if "phrases" in arr:
+            counts += f", {len(song.levels)} difficulty levels"
         log(f"  {arr_id:<9} {tune:<14} {counts}")
 
     dump(timeline, "song_timeline.json")
