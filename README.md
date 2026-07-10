@@ -4,6 +4,12 @@ Turn your Rocksmith 2014 songs (`.psarc`) into
 [feedpak](https://github.com/got-feedback/feedpak-spec) packages you can play in
 [got-feedBack](https://github.com/got-feedback).
 
+**TL;DR:** download the
+[latest release](https://github.com/carelesshangman/psarc2feedpak/releases/latest),
+unzip it, run `psarc2feedpak.exe`, add your `.psarc` files and hit **Convert**.
+Each song comes out as an `Artist - Title.feedpak` you can drop straight into
+got-feedBack.
+
 ![The app after converting two songs](docs/gui-done.png)
 
 Notes, chords, slides, bends, lyrics, album art and audio all come across. The
@@ -11,10 +17,10 @@ chart is flattened to the full (hardest) difficulty.
 
 ## Getting started
 
-1. Grab the installer from the
+1. Grab the zip from the
    [Releases](https://github.com/carelesshangman/psarc2feedpak/releases) page.
    It bundles everything you need (ffmpeg, vgmstream, no Python required).
-2. Run it and open **psarc2feedpak** from the Start menu.
+2. Unzip it anywhere and run **psarc2feedpak.exe**.
 3. Click **Add .psarc files…** and pick your songs. You can select as many as
    you like.
 4. Optionally click **Output folder…** to choose where the `.feedpak` files
