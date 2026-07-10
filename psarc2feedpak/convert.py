@@ -297,8 +297,15 @@ def convert_song(song_key, songs, attrs, wems, dds, out_path, out_dir, *,
             json.dump(obj, fh, ensure_ascii=False, separators=(",", ":"))
 
     manifest_arrs, timeline, extras = [], None, {}
+    seen_ids = {}
     for stem, song, a, name in playable:
+        # CDLC can carry several arrangements with the same name (two "Lead"
+        # charts, say); keep them all instead of overwriting one JSON file.
         arr_id = name.lower().replace(" ", "_")
+        seen_ids[arr_id] = seen_ids.get(arr_id, 0) + 1
+        if seen_ids[arr_id] > 1:
+            name = f"{name} {seen_ids[arr_id]}"
+            arr_id = f"{arr_id}_{seen_ids[arr_id]}"
         arr = _arrangement(song, name)
         tones = _tones(song, a)
         if tones:
