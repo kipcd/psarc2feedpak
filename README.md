@@ -12,8 +12,9 @@ got-feedBack.
 
 ![The app after converting two songs](docs/gui-done.png)
 
-Notes, chords, slides, bends, lyrics, album art and audio all come across. The
-chart is flattened to the full (hardest) difficulty.
+Notes, chords, slides, bends, lyrics, album art and audio all come across. You
+get the full (hardest) chart by default, and Rocksmith's per-phrase difficulty
+ladder is included too, so players that support adaptive difficulty can use it.
 
 ## Getting started
 
