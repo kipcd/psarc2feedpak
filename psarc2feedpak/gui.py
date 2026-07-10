@@ -111,11 +111,9 @@ class App:
         for i, src in enumerate(files, 1):
             src = Path(src)
             self.msgs.put(("log", f"\n[{i}/{len(files)}] {src.name}\n"))
-            dest = None
-            if outdir:
-                dest = str(Path(outdir) / (src.stem + ".feedpak"))
             try:
-                convert(src, dest, log=lambda m: self.msgs.put(("log", m + "\n")))
+                convert(src, out_dir=outdir,
+                        log=lambda m: self.msgs.put(("log", m + "\n")))
                 ok += 1
             except ConversionError as e:
                 self.msgs.put(("log", f"  FAILED: {e}\n"))

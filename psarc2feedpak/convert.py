@@ -249,9 +249,10 @@ def _identify(files):
     return songs, attrs, wems, dds
 
 
-def convert_song(name, stems, songs, attrs, wems, dds, out_path, *, keep_dir=False, log=print):
+def convert_song(song_key, songs, attrs, wems, dds, out_path, out_dir, *,
+                 keep_dir=False, log=print):
     """Convert a single song to feedpak format."""
-    log(f"Converting {name}...")
+    log(f"Converting {song_key}...")
 
     playable, vocals, meta_attrs = [], None, None
     for stem, song in songs.items():
@@ -269,7 +270,7 @@ def convert_song(name, stems, songs, attrs, wems, dds, out_path, *, keep_dir=Fal
     meta_attrs = meta_attrs or {}
 
     meta = {
-        "title": meta_attrs.get("SongName", name),
+        "title": meta_attrs.get("SongName", song_key),
         "artist": meta_attrs.get("ArtistName", "Unknown Artist"),
         "album": meta_attrs.get("AlbumName"),
         "year": meta_attrs.get("SongYear"),
@@ -277,7 +278,10 @@ def convert_song(name, stems, songs, attrs, wems, dds, out_path, *, keep_dir=Fal
                           or playable[0][1].metadata.songLength),
     }
 
-    
+    if out_path is None:
+        safe = "".join(c if c.isalnum() or c in " -_'" else "_"
+                       for c in f"{meta['artist']} - {meta['title']}").strip()
+        out_path = out_dir / f"{safe}.feedpak"
     out_path = Path(out_path)
 
     build = Path(str(out_path) + ".build")
@@ -371,39 +375,76 @@ def convert_song(name, stems, songs, attrs, wems, dds, out_path, *, keep_dir=Fal
         shutil.rmtree(build)
 
     log(f"Wrote {out_path}")
+    return out_path
 
 
-def convert(psarc_path, out_path=None, *, keep_dir=False, log=print):
+def _bank_wems(files, bank_name):
+    """Wems referenced by a Wwise soundbank, largest first.
+
+    Banks embed each streamed wem's id as a little-endian uint32; the wems
+    themselves are stored as <id>.wem, so a byte search is enough to match them.
+    """
+    if not bank_name:
+        return []
+    bank = next((blob for n, blob in files.items()
+                 if n.endswith(".bnk") and Path(n).name == bank_name), None)
+    if bank is None:
+        return []
+    refs = [blob for n, blob in files.items()
+            if n.endswith(".wem") and Path(n).stem.isdigit()
+            and int(Path(n).stem).to_bytes(4, "little") in bank]
+    return sorted(refs, key=len, reverse=True)
+
+
+def _album_art(files, urn):
+    """DDS blobs for an AlbumArt urn like urn:image:dds:album_foo, largest first."""
+    if not urn:
+        return []
+    key = urn.rsplit(":", 1)[-1]
+    art = [blob for n, blob in files.items()
+           if n.endswith(".dds") and Path(n).stem.startswith(key)]
+    return sorted(art, key=len, reverse=True)
+
+
+def convert(psarc_path, out_path=None, *, out_dir=None, keep_dir=False, log=print):
+    """Convert every song in the psarc; returns the list of written paths."""
     psarc_path = Path(psarc_path)
     log(f"Reading {psarc_path.name}")
-    songs, attrs, wems, dds = _identify(read_psarc(psarc_path))
+    files = read_psarc(psarc_path)
+    songs, attrs, wems, dds = _identify(files)
 
-    names = {}
-
+    # Group arrangements by song: "foo_lead"/"foo_rhythm"/"foo_vocals" -> "foo".
+    # Single-song files have one group; compilation discs have one per song.
+    groups = {}
     for stem, song in songs.items():
-        name = stem.rsplit("_", 1)[0]
-        obj = names.get(name, {"songs": {}, "attrs": {}, "stems": []})
-        obj["songs"][stem] = song
-        if stem not in obj["stems"]:
-            obj["stems"].append(stem)
-        names[name] = obj
-    for stem, attr in attrs.items():
-        name = stem.rsplit("_", 1)[0]
-        obj = names.get(name, {"songs": {}, "attrs": {}, "stems": []})
-        obj["attrs"][stem] = attr
-        if stem not in obj["stems"]:
-            obj["stems"].append(stem)
-        names[name] = obj
+        groups.setdefault(stem.rsplit("_", 1)[0], {})[stem] = song
 
-    if out_path is not None and len(names) > 1:
-        raise ConversionError("cannot specify a single output path for multiple songs")
-    for name, obj in names.items():
-        songs, attrs, stems = obj["songs"], obj["attrs"], obj["stems"]
-        if not songs:
-            log(f"  {name}: no playable arrangements")
+    if out_path is not None and len(groups) > 1:
+        raise ConversionError("cannot write multiple songs to a single output path")
+    out_dir = Path(out_dir) if out_dir is not None else psarc_path.parent
+
+    written = []
+    for key, group in sorted(groups.items()):
+        group_attrs = {s: attrs[s] for s in group if s in attrs}
+        playable = [s for s in group
+                    if not s.endswith("_vocals")
+                    and (group_attrs.get(s, {}).get("ArrangementName")
+                         or "").lower() != "vocals"]
+        if not playable:
+            log(f"  {key}: no playable arrangements, skipping")
             continue
 
-        if len(names) > 1:
-            out_path = psarc_path.with_name(f"{name}.feedpak")
+        # Each song carries its own audio and art; fall back to the size-sorted
+        # archive-wide lists when the manifest doesn't say (or banks are absent).
+        sa = next((group_attrs[s] for s in playable if s in group_attrs), {})
+        main = _bank_wems(files, sa.get("SongBank"))
+        preview = _bank_wems(files, sa.get("PreviewBankPath"))
+        song_wems = main[:1] + preview[:1] if main else wems
+        song_dds = _album_art(files, sa.get("AlbumArt")) or dds
 
-        convert_song(name, stems, songs, attrs, wems, dds, out_path=out_path, keep_dir=keep_dir, log=log)
+        written.append(convert_song(key, group, group_attrs, song_wems, song_dds,
+                                    out_path, out_dir, keep_dir=keep_dir, log=log))
+
+    if not written:
+        raise ConversionError("no playable arrangements in this psarc")
+    return written
