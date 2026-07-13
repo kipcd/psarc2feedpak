@@ -67,7 +67,10 @@ def read(path):
         zlengths = list(parsed.zlengths)
 
         # First entry is the manifest: a newline-separated list of the rest.
-        names = _read_entry(f, parsed.entries[0], zlengths).decode().splitlines()
+        # Some third-party packers write Windows separators; normalize so the
+        # path checks below (and in convert) match.
+        manifest = _read_entry(f, parsed.entries[0], zlengths).decode()
+        names = manifest.replace("\\", "/").splitlines()
         files = {
             name: _read_entry(f, parsed.entries[i + 1], zlengths)
             for i, name in enumerate(names)
