@@ -47,9 +47,9 @@ def _read_entry(f, entry, zlengths):
             pass  # stored uncompressed
         out.write(chunk)
     data = out.getvalue()
-    if len(data) != entry.length:
-        raise ValueError(f"psarc entry size mismatch: {len(data)} != {entry.length}")
-    return data
+    if len(data) < entry.length:
+        raise ValueError(f"psarc entry too short: {len(data)} < {entry.length}")
+    return data[:entry.length]
 
 
 def read(path):
