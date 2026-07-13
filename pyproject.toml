@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "psarc2feedpak"
-version = "0.2.0"
+version = "0.3.2"
 description = "Convert Rocksmith 2014 .psarc custom songs to got-feedBack .feedpak packages"
 readme = "README.md"
 requires-python = ">=3.9"
