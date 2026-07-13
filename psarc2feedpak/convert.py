@@ -16,6 +16,7 @@ from pathlib import Path
 from . import sng
 from .audio import Tools
 from .psarc import read as read_psarc
+from .settings import Options, render_name
 
 FEEDPAK_VERSION = "1.14.0"
 
@@ -209,7 +210,7 @@ def _phrases(song):
     return out if any(p["levels"] for p in out) else None
 
 
-def _arrangement(song, name):
+def _arrangement(song, name, *, include_phrases=True):
     notes_raw, anchors_raw, shapes_raw = _flatten(song)
     notes, chords = [], []
     for n in notes_raw:
@@ -232,7 +233,7 @@ def _arrangement(song, name):
                        "arp": bool(t.mask & sng.TEMPLATE_ARPEGGIO)}
                       for t in song.chordTemplates],
     }
-    phrases = _phrases(song)
+    phrases = _phrases(song) if include_phrases else None
     if phrases:
         out["phrases"] = phrases
     return out
@@ -330,9 +331,10 @@ def _identify(files):
 
 
 def convert_song(song_key, songs, attrs, wems, dds, out_path, out_dir, *,
-                 keep_dir=False, log=print):
+                 keep_dir=False, options=None, log=print):
     """Convert a single song to feedpak format."""
     t0 = time.perf_counter()
+    opt = options or Options()
 
     playable, vocals, meta_attrs = [], None, None
     for stem, song in songs.items():
@@ -363,10 +365,23 @@ def convert_song(song_key, songs, attrs, wems, dds, out_path, out_dir, *,
     log(f"Converting {byline} ({_mmss(meta['duration'])})")
 
     if out_path is None:
-        safe = "".join(c if c.isalnum() or c in " -_'" else "_"
-                       for c in f"{meta['artist']} - {meta['title']}").strip()
+        try:
+            raw = render_name(opt.name_template,
+                              artist=meta["artist"], title=meta["title"],
+                              album=meta.get("album") or "",
+                              year=meta.get("year") or "")
+        except ValueError:
+            raise ConversionError(
+                f"bad filename template: {opt.name_template!r}")
+        raw = raw or f"{meta['artist']} - {meta['title']}"
+        safe = "".join(c if c.isalnum() or c in " -_'()." else "_"
+                       for c in raw).strip(" .")
         out_path = out_dir / f"{safe}.feedpak"
     out_path = Path(out_path)
+
+    if not opt.overwrite and out_path.exists():
+        log(f"Skipped: {out_path.name} already exists")
+        return out_path
 
     build = Path(str(out_path) + ".build")
     if build.exists():
@@ -390,7 +405,7 @@ def convert_song(song_key, songs, attrs, wems, dds, out_path, out_dir, *,
         if seen_ids[arr_id] > 1:
             name = f"{name} {seen_ids[arr_id]}"
             arr_id = f"{arr_id}_{seen_ids[arr_id]}"
-        arr = _arrangement(song, name)
+        arr = _arrangement(song, name, include_phrases=opt.include_phrases)
         tones = _tones(song, a)
         if tones:
             arr["tones"] = tones
@@ -436,24 +451,29 @@ def convert_song(song_key, songs, attrs, wems, dds, out_path, out_dir, *,
 
     tools = Tools()
     stems = []
-    if wems:
+    if wems and not opt.include_audio:
+        log("  audio     skipped (off in settings)")
+    elif wems:
         if not tools.can_audio:
             raise ConversionError("need " + " and ".join(tools.missing())
                                   + " for audio (put vgmstream-cli in tools/vgmstream/)")
         log(f"  audio     encoding {_size(len(wems[0]))} wem...")
         ogg = build / "stems" / "full.ogg"
-        tools.wem_to_ogg(wems[0], ogg, scratch)
+        tools.wem_to_ogg(wems[0], ogg, scratch, quality=opt.audio_quality)
         stems.append({"id": "full", "file": "stems/full.ogg", "default": True})
         audio_line = f"  audio     full.ogg ({_size(ogg.stat().st_size)})"
         if len(wems) > 1:
-            tools.wem_to_ogg(wems[1], build / "preview.ogg", scratch)
+            tools.wem_to_ogg(wems[1], build / "preview.ogg", scratch,
+                             quality=opt.audio_quality)
             extras["preview"] = "preview.ogg"
             audio_line += " + preview"
         log(audio_line)
     else:
         log("  warning: no .wem audio found")
 
-    if dds and tools.ffmpeg:
+    if dds and not opt.include_cover:
+        log("  cover     skipped (off in settings)")
+    elif dds and tools.ffmpeg:
         try:
             tools.dds_to_png(dds[0], build / "cover.png", scratch)
             extras["cover"] = "cover.png"
@@ -473,7 +493,7 @@ def convert_song(song_key, songs, attrs, wems, dds, out_path, out_dir, *,
             if p.is_file():
                 zf.write(p, p.relative_to(build).as_posix())
 
-    if keep_dir:
+    if keep_dir or opt.keep_dir:
         final = out_path.with_name(out_path.name + ".dir")
         if final.exists():
             shutil.rmtree(final)
@@ -514,7 +534,8 @@ def _album_art(files, urn):
     return sorted(art, key=len, reverse=True)
 
 
-def convert(psarc_path, out_path=None, *, out_dir=None, keep_dir=False, log=print):
+def convert(psarc_path, out_path=None, *, out_dir=None, keep_dir=False,
+            options=None, log=print):
     """Convert every song in the psarc; returns the list of written paths."""
     psarc_path = Path(psarc_path)
     log(f"Reading {psarc_path.name}")
@@ -553,7 +574,8 @@ def convert(psarc_path, out_path=None, *, out_dir=None, keep_dir=False, log=prin
         song_dds = _album_art(files, sa.get("AlbumArt")) or dds
 
         written.append(convert_song(key, group, group_attrs, song_wems, song_dds,
-                                    out_path, out_dir, keep_dir=keep_dir, log=log))
+                                    out_path, out_dir, keep_dir=keep_dir,
+                                    options=options, log=log))
 
     if not written:
         raise ConversionError("no playable arrangements in this psarc")

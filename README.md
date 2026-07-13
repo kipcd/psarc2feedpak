@@ -45,6 +45,21 @@ A few things it handles that might not be obvious:
   in the package. If the charter didn't include one, there is nothing to
   convert.
 
+## Settings
+
+The gear button in the top right opens the settings. They are saved between
+runs.
+
+- **Filename.** How each package is named. The default is
+  `{artist} - {title}`, and `{album}` and `{year}` work too.
+- **Overwrite.** Turn this off to leave songs alone that already have a
+  `.feedpak`, which makes re-running a big batch cheap.
+- **Keep the unzipped folder.** Handy when you want to look inside a package.
+- **Audio quality.** Vorbis quality from 0 (smallest) to 10 (best). The
+  default of 5 sounds fine and keeps files reasonable.
+- **What goes in.** Audio, cover art and the difficulty ladder can each be
+  turned off if you want small, charts-only packages.
+
 ## Command line
 
 If you'd rather script it, install the package and run the module directly:
@@ -54,6 +69,17 @@ pip install construct cryptography
 python -m psarc2feedpak song_p.psarc
 python -m psarc2feedpak song_p.psarc -o out.feedpak
 python -m psarc2feedpak song_p.psarc --keep-dir   # also leave the unzipped folder
+```
+
+All the GUI settings exist as flags too. They use the defaults above and
+ignore the GUI's saved settings, so scripts behave the same everywhere:
+
+```
+python -m psarc2feedpak song_p.psarc --template "{title} ({artist})"
+python -m psarc2feedpak song_p.psarc --quality 8
+python -m psarc2feedpak song_p.psarc --no-audio --no-cover   # charts only
+python -m psarc2feedpak song_p.psarc --no-ladder             # full chart only
+python -m psarc2feedpak song_p.psarc --skip-existing
 ```
 
 Running from source, audio needs two external tools on your `PATH` (or drop
