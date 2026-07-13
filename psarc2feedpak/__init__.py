@@ -3,4 +3,4 @@
 from .convert import convert, ConversionError
 
 __all__ = ["convert", "ConversionError"]
-__version__ = "0.3.1"
+__version__ = "0.3.3"
